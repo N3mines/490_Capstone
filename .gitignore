@@ -4,3 +4,5 @@ dash_data/*
 
 # Byte-compiles / optimized / DLL files
 __pycash__/
+*.py[cod]
+*.py.class
