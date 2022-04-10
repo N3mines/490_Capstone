@@ -7,3 +7,6 @@ __pycash__/
 *.py[cod]
 *.py.class
 .DS_Store
+
+venv
+.env

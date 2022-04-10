@@ -7,34 +7,37 @@ from dash.dependencies import Input, Output, State, MATCH
 
 import os
 import PIL
+import base64
 import numpy as np
 import matplotlib.pyplot as plt
 
 import packages.tensor as td
 
+from io import BytesIO
+from PIL import Image
 from pathlib import Path
 from zipfile import ZipFile
-from flask import Flask
 
 from packages.targeted_callbacks import targeted_callback
 
 external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
 
-server = Flask(__name__)
-app = dash.Dash(name='dash_app', server=server, external_stylesheets=external_stylesheets)
+app = dash.Dash(name=__name__, external_stylesheets=external_stylesheets)
+
+server = app.server
 
 # This will change from what computer is running the program, in this case it
 # is made for a Mac
-UPLOAD_FOLDER = "dash_data"
+UPLOAD_FOLDER = 'dash_data'
 du.configure_upload(app, UPLOAD_FOLDER)
 
 
-tensor = td.tensor_data()
+tensor = {} 
 # Initializing these variables here.  Could be changed to allow users control
 # of the values
-tensor.batch_size = 3
-tensor.img_height = 180
-tensor.img_width = 180
+batch_size = 3
+img_height = 180
+img_width = 180
 
 
 SIDEBAR_STYLE = {
@@ -55,10 +58,10 @@ CONTENT_STYLE = {
 sidebar = html.Div(
         id='sidebar',
         children=[
-            html.H2("Image Trainer", className="display-4"),
+            html.H2('Image Trainer', className='display-4'),
             html.Hr(),
             du.Upload(
-                text='Drag and Drop .zip here',
+                text='Select Images to Classify',
                 text_completed='Completed: ',
                 pause_button=False,
                 cancel_button=True,
@@ -80,14 +83,15 @@ content = html.Div([
         style=CONTENT_STYLE
     )
 
-def parse_data(dir_path, dir_name):
+def parse_data(dir_name):
     classes = []
-    for file_name in os.listdir(dir_path): 
-        f = os.path.join(dir_path, file_name)
-        if os.path.isdir(f):
+    f = os.path.join(tensor[dir_name].session_dir, dir_name)
+    for file_name in os.listdir(f): 
+        f2 = os.path.join(f, file_name)
+        if os.path.isdir(f2):
             classes.append(
-                    html.H6(
-                        id=f,
+                    html.Li(
+                        id=f2,
                         children=file_name
                     ))
 
@@ -95,19 +99,19 @@ def parse_data(dir_path, dir_name):
             html.Div(
                 children=[
                     html.H3(
-                        id={'type': 'dir_path', 'index': dir_path},
+                        id={'type': 'dir_path', 'index': dir_name},
                         children=dir_name
                     ),
                     html.H5(
-                        id={'type': 'classes', 'index': dir_path},
+                        id={'type': 'classes', 'index': dir_name},
                         children='Directory Classes Found:'
                     ),
-                    html.Div(
-                        id={'type': 'file_classes', 'index': dir_path},
+                    html.Ul(
+                        id={'type': 'file_classes', 'index': dir_name},
                         children=classes
                     ),
                     html.Button(
-                        id={'type': 'train_model', 'index': dir_path},
+                        id={'type': 'train_model', 'index': dir_name},
                         children='Train on Data',
                         style={'padding-bottom':'3rem'}
                     )
@@ -120,8 +124,16 @@ def parse_data(dir_path, dir_name):
             html.Div(
                 children=[
                     html.H5(
-                        id={'type': 'trained', 'index': dir_path},
-                        children=""
+                        id={'type': 'training', 'index': dir_name},
+                        children=''
+                    ),
+                    html.H5(
+                        id={'type': 'trained', 'index': dir_name},
+                        children=''
+                    ),
+                    html.H5(
+                        id={'type': 'prediction_result', 'index': dir_name},
+                        children=''
                     )
                 ],
                 style={
@@ -141,6 +153,18 @@ def parse_data(dir_path, dir_name):
                 'overflow': 'auto'
             })
 
+def apply_fields(file_name):
+    fields = [
+            dcc.Upload(
+                id={'type': 'upload_images', 'index': file_name},
+                children=html.Div([
+                    html.Button('Upload Image to Classify')]
+                )
+            )]
+
+    return html.Div(
+            children = fields
+            )
 
 
 # Setting up initial webpage layout
@@ -165,7 +189,6 @@ def update_output(is_completed, file_names, upload_id):
         else:
             root_folder = UPLOAD_FOLDER
 
-        tensor.session_dir = root_folder
 
         for file_name in file_names:
             # zipfile sandard library for unzipping the images?
@@ -175,28 +198,71 @@ def update_output(is_completed, file_names, upload_id):
         for file_name in os.listdir(root_folder):
             f = os.path.join(root_folder, file_name)
             if os.path.isdir(f) and file_name != '__MACOSX':
-                children.append(parse_data(f, file_name))
+                tensor[file_name] = td.tensor_data()
+                tensor[file_name].batch_size = batch_size
+                tensor[file_name].img_height = img_height 
+                tensor[file_name].img_width = img_width 
+
+                tensor[file_name].session_dir = root_folder
+                children.append(parse_data(file_name))
 
     return children
 
-@app.callback(
-        Output({'type': 'trained', 'index': MATCH}, 'children'),
-        Input({'type': 'train_model', 'index': MATCH}, 'n_clicks'),
-        State({'type': 'dir_path', 'index': MATCH}, 'children'),
-        prevent_initial_call=True)
-def train_feedback(n_clicks, file_name):
+
+def train_feedback(children):
     global tensor
-
-    f = os.path.join(tensor.session_dir, file_name)
-    tensor.build_tensor(f)
-
-    tensor.train_tensor()
     
+    input_states = dash.callback_context.states
+    state_iter = iter(input_states.values())
+    file_name = next(state_iter)
+
+    f = os.path.join(tensor[file_name].session_dir, file_name)
+    tensor[file_name].build_tensor(f)
+
+    tensor[file_name].train_tensor()
+
+    children = []
+    children.append('Model Trained!')
+    children.append(apply_fields(file_name))
+
+    return children
+
+targeted_callback(
+        train_feedback,
+        Input({'type': 'train_model', 'index': MATCH}, 'n_clicks'),
+        Output({'type': 'trained', 'index': MATCH}, 'children'),
+        State({'type': 'dir_path', 'index': MATCH}, 'children'),
+        app=app)
+
+def pretrain_feedback(n_clicks):
+    return 'Training! Please wait :)'
+
+targeted_callback(
+        pretrain_feedback,
+        Input({'type': 'train_model', 'index': MATCH}, 'n_clicks'),
+        Output({'type': 'training', 'index': MATCH}, 'children'),
+        app=app)
+
+@app.callback(
+        Output({'type': 'prediction_result', 'index': MATCH}, 'children'),
+        Input({'type': 'upload_images', 'index': MATCH}, 'contents'),
+        prevent_initial_call = True)
+def update_output(file):
+    if file is None:
+        raise dash.exceptions.PreventUpdate
+    file = file.split(',')
+    image = Image.open(BytesIO(base64.b64decode(file[1]))) 
+    rgb = Image.new('RGB', image.size)
+    rgb.paste(image)
+    image = rgb
+    image = image.resize((img_height,img_width))
+    np_image = np.array(image)
     
+    print(np_image)
+        
 
-    return "trained lmaoo"
-
+    return []
 
 
 if __name__ == '__main__':
-    app.run_server(debug=True, host='10.0.0.45')
+    app.run_server(debug=True)

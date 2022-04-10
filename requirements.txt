@@ -1,0 +1,6 @@
+dash
+PIL
+numpy
+matplotlib
+pathlib
+zipfile

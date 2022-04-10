@@ -62,7 +62,7 @@ class tensor_data:
         
     def train_tensor(self):
         global tensor
-        epochs=10
+        epochs=1
         self.history = self.model.fit(
             self.train_ds,
             validation_data=self.val_ds,
