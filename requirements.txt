@@ -3,12 +3,7 @@ dash_table
 dash_uploader
 dash_core_components
 dash_html_components
-os
-PIL
-base64
 numpy
 matplotlib
-io
 pathlib
-zipfile
-tensorflow
+tensorflow-cpu
