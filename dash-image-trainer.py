@@ -211,6 +211,8 @@ def update_output(is_completed, file_names, upload_id):
 
 def train_feedback(children):
     global tensor
+
+    print(tensor)
     
     input_states = dash.callback_context.states
     state_iter = iter(input_states.values())
