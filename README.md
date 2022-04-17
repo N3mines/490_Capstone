@@ -7,5 +7,5 @@ When uploaded files, make sure its a zip in this format
 * Class Name
   * image files
 * Class Name
-  * image files
+  * image files  
 etc...
