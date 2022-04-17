@@ -35,7 +35,7 @@ du.configure_upload(app, UPLOAD_FOLDER)
 tensor = {} 
 # Initializing these variables here.  Could be changed to allow users control
 # of the values
-batch_size = 3
+batch_size = 32
 img_height = 180
 img_width = 180
 
@@ -110,10 +110,24 @@ def parse_data(dir_name):
                         id={'type': 'file_classes', 'index': dir_name},
                         children=classes
                     ),
+                    html.H5('Select epochs for training'),
+                    dcc.Slider(
+                        id={'type': 'epochs', 'index': dir_name},
+                        min=0,
+                        max=10,
+                        step=1,
+                        value=5,
+                        tooltip={'placement': 'bottom'}
+                    ),
+                    dcc.Checklist(
+                        id={'type': 'randomize', 'index': dir_name},
+                        options=[{'label': 'Randomize Image Data', 'value': 'RI'}],
+                        value=['RI']
+                    ),
                     html.Button(
                         id={'type': 'train_model', 'index': dir_name},
                         children='Train on Data',
-                        style={'padding-bottom':'3rem'}
+                        style={'padding-bottom':'3rem'},
                     )
                 ],
                 style={
@@ -212,16 +226,17 @@ def update_output(is_completed, file_names, upload_id):
 def train_feedback(children):
     global tensor
 
-    print(tensor)
     
     input_states = dash.callback_context.states
     state_iter = iter(input_states.values())
     file_name = next(state_iter)
+    epochs = next(state_iter)
+    randomize = next(state_iter)
 
     f = os.path.join(tensor[file_name].session_dir, file_name)
-    tensor[file_name].build_tensor(f)
+    tensor[file_name].build_tensor(f, randomize)
 
-    tensor[file_name].train_tensor()
+    tensor[file_name].train_tensor(epochs)
 
     children = []
     children.append('Model Trained!')
@@ -234,6 +249,8 @@ targeted_callback(
         Input({'type': 'train_model', 'index': MATCH}, 'n_clicks'),
         Output({'type': 'trained', 'index': MATCH}, 'children'),
         State({'type': 'dir_path', 'index': MATCH}, 'children'),
+        State({'type': 'epochs', 'index': MATCH}, 'value'),
+        State({'type': 'randomize', 'index': MATCH}, 'value'),
         app=app)
 
 def pretrain_feedback(n_clicks):
@@ -248,22 +265,23 @@ targeted_callback(
 @app.callback(
         Output({'type': 'prediction_result', 'index': MATCH}, 'children'),
         Input({'type': 'upload_images', 'index': MATCH}, 'contents'),
+        State({'type': 'dir_path', 'index': MATCH}, 'children'),
         prevent_initial_call = True)
-def update_output(file):
+def update_output(file, file_name):
+    global tensor
     if file is None:
         raise dash.exceptions.PreventUpdate
     file = file.split(',')
     image = Image.open(BytesIO(base64.b64decode(file[1]))) 
-    rgb = Image.new('RGB', image.size)
-    rgb.paste(image)
-    image = rgb
-    image = image.resize((img_height,img_width))
-    np_image = np.array(image)
+    image = image.resize((img_height, img_width))
+
+    score = tensor[file_name].predict_tensor(image)
     
-    print(np_image)
+    output = (tensor[file_name].class_names[np.argmax(score)]+" with "+
+        str(100*np.max(score)) + " percent confidence")
         
 
-    return []
+    return [output]
 
 
 if __name__ == '__main__':
