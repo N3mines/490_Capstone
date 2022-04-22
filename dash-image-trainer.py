@@ -1,8 +1,6 @@
 import dash
-import dash_table
 import dash_uploader as du
-import dash_core_components as dcc
-import dash_html_components as html
+from dash import dcc, html, dash_table
 from dash.dependencies import Input, Output, State, MATCH
 
 import os
@@ -16,7 +14,7 @@ import packages.tensor as td
 from io import BytesIO
 from PIL import Image
 from pathlib import Path
-from zipfile import ZipFile
+import zipfile
 
 from packages.targeted_callbacks import targeted_callback
 
@@ -174,7 +172,11 @@ def apply_fields(file_name):
                 children=html.Div([
                     html.Button('Upload Image to Classify')]
                 )
-            )]
+            ),
+            html.Button('Download Model', 
+                id={'type': 'download_button', 'index': file_name}),
+            dcc.Download(id={'type': 'download_model', 'index': file_name})
+        ]
 
     return html.Div(
             children = fields
@@ -206,7 +208,7 @@ def update_output(is_completed, file_names, upload_id):
 
         for file_name in file_names:
             # zipfile sandard library for unzipping the images?
-            with ZipFile(root_folder+'/'+file_name, 'r') as zip:
+            with zipfile.ZipFile(root_folder+'/'+file_name, 'r') as zip:
                 zip.extractall('./'+root_folder)
                 
         for file_name in os.listdir(root_folder):
@@ -282,6 +284,31 @@ def update_output(file, file_name):
         
 
     return [output]
+
+def zipdir(path, ziph):
+    for root, dirs, files in os.walk(path):
+        for file in files:
+            ziph.write(os.path.join(root, file),
+                       os.path.relpath(os.path.join(root, file),
+                                       os.path.join(path, '..')))
+
+
+@app.callback(
+        Output({'type': 'download_model', 'index': MATCH}, 'data'),
+        Input({'type': 'download_button', 'index': MATCH}, 'n_clicks'),
+        State({'type': 'dir_path', 'index': MATCH}, 'children'),
+        prevent_initial_call = True)
+def download_tensor(n_clicks, file_name):
+    global tensor
+    print('yo')
+    f = os.path.join(tensor[file_name].session_dir, file_name)
+    tensor[file_name].model.save(f+'/my_model.h5')
+
+    ret = dcc.send_file(f+'/my_model.h5')
+    
+    os.remove(f+'/my_model.h5')
+
+    return ret
 
 
 if __name__ == '__main__':
