@@ -10,3 +10,4 @@ __pycash__/
 
 venv
 .env
+*.swp
