@@ -16,8 +16,10 @@ from PIL import Image
 from pathlib import Path
 import zipfile
 
+# Code in targeted_callback is credited with github link in file
 from packages.targeted_callbacks import targeted_callback
 
+# CSS Styling for the website
 external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
 
 app = dash.Dash(name=__name__, external_stylesheets=external_stylesheets)
@@ -37,7 +39,7 @@ batch_size = 32
 img_height = 180
 img_width = 180
 
-
+# Styling for the sidebar on website
 SIDEBAR_STYLE = {
         'position': 'fixed',
         'top': 0,
@@ -48,11 +50,13 @@ SIDEBAR_STYLE = {
         'width': '15%'
     }
 
+# Styling for the main content on the website
 CONTENT_STYLE = {
         'margin-left': '17%',
         'padding': '2rem 1rem'
     }
 
+# Setting up the sidebar with buttons and labels the user can use
 sidebar = html.Div(
         id='sidebar',
         children=[
@@ -71,16 +75,16 @@ sidebar = html.Div(
         style=SIDEBAR_STYLE
     )
 
+# Setting up blank content since it will be populated by uploaded data later
 content = html.Div([
-            html.Div(
-                children='Main page where tensorflow work will be',
-                style={'textAlign': 'center'}
-            ),
             html.Div(id='output_image_upload')
         ],
         style=CONTENT_STYLE
     )
 
+# Populating cards in the content on the page.  Data from the uploaded zip file
+# is processed and classes pulled.  Most of the card will still be blank after
+# this step but will change as the user interacts and does more
 def parse_data(dir_name):
     classes = []
     f = os.path.join(tensor[dir_name].session_dir, dir_name)
@@ -133,6 +137,8 @@ def parse_data(dir_name):
                     'padding': '3rem 3rem 3rem 3rem',
                     'float': 'left'}
             ),
+            # This is the section that will get populated by the user later on
+            # each with unique IDs to reference
             html.Div(
                 children=[
                     html.H5(
@@ -146,6 +152,9 @@ def parse_data(dir_name):
                     html.H5(
                         id={'type': 'prediction_result', 'index': dir_name},
                         children=''
+                    ),
+                    html.Div(
+                        id={'type': 'prediction_img', 'index': dir_name},
                     )
                 ],
                 style={
@@ -154,7 +163,9 @@ def parse_data(dir_name):
                     'float': 'left'
                 }
             )]
-
+    # Styling for the card containing the content.  Some thought was put into
+    # it so that you can tell the difference between two different datasets
+    # based off of it's look
     return html.Div(
             children=card_data,
             style={
@@ -165,6 +176,7 @@ def parse_data(dir_name):
                 'overflow': 'auto'
             })
 
+# Populating the upload data section with the same unique ID pattern
 def apply_fields(file_name):
     fields = [
             dcc.Upload(
@@ -186,6 +198,17 @@ def apply_fields(file_name):
 # Setting up initial webpage layout
 app.layout = html.Div([sidebar, content])
 
+### 
+##
+# This is all going to be callbacks and the interactions that the users
+# triggers
+##
+###
+
+# Callback to add cards to the website content.  One issue present here is that
+# state isn't saved so if the user adds another dataset, everything is
+# re-applied to the content section.  An improvement here would be to add state
+# which is complicated and didn't really work.
 @app.callback(
         Output('output_image_upload', 'children'),
         Input('upload_data', 'isCompleted'),
@@ -205,12 +228,15 @@ def update_output(is_completed, file_names, upload_id):
         else:
             root_folder = UPLOAD_FOLDER
 
-
+        # Extract data from the uploaded zip file.
         for file_name in file_names:
             # zipfile sandard library for unzipping the images?
             with zipfile.ZipFile(root_folder+'/'+file_name, 'r') as zip:
                 zip.extractall('./'+root_folder)
-                
+        
+        # Go through all the directories of images and add a card to the list.
+        # This will also write to the global dictionary so that data can be
+        # accessed later for tensor
         for file_name in os.listdir(root_folder):
             f = os.path.join(root_folder, file_name)
             if os.path.isdir(f) and file_name != '__MACOSX':
@@ -224,11 +250,16 @@ def update_output(is_completed, file_names, upload_id):
 
     return children
 
+# This defenition is using the targeted_callback method which allows multiple
+# functions to have the same output.  This didn't quite work with lots of
+# testing, but the functionw as never changed back to the main callback layout
 
+# This defenition is just used to start the tensor training and return a
+# message when it's done
 def train_feedback(children):
     global tensor
 
-    
+     
     input_states = dash.callback_context.states
     state_iter = iter(input_states.values())
     file_name = next(state_iter)
@@ -246,6 +277,7 @@ def train_feedback(children):
 
     return children
 
+# Part of the train_feedback callback
 targeted_callback(
         train_feedback,
         Input({'type': 'train_model', 'index': MATCH}, 'n_clicks'),
@@ -255,17 +287,22 @@ targeted_callback(
         State({'type': 'randomize', 'index': MATCH}, 'value'),
         app=app)
 
+# Message for when training button is initially clicked so user knows something
+# is happening
 def pretrain_feedback(n_clicks):
     return 'Training! Please wait :)'
 
+# Part of the pretrain_feedback
 targeted_callback(
         pretrain_feedback,
         Input({'type': 'train_model', 'index': MATCH}, 'n_clicks'),
         Output({'type': 'training', 'index': MATCH}, 'children'),
         app=app)
 
+# Add the prediction results and image it predicted on to the card.
 @app.callback(
         Output({'type': 'prediction_result', 'index': MATCH}, 'children'),
+        Output({'type': 'prediction_img', 'index': MATCH}, 'children'),
         Input({'type': 'upload_images', 'index': MATCH}, 'contents'),
         State({'type': 'dir_path', 'index': MATCH}, 'children'),
         prevent_initial_call = True)
@@ -273,7 +310,11 @@ def update_output(file, file_name):
     global tensor
     if file is None:
         raise dash.exceptions.PreventUpdate
+
+    image_ret = [html.Img(src=file)]
+
     file = file.split(',')
+    # Take in base64 string of image and convert it to PIL format
     image = Image.open(BytesIO(base64.b64decode(file[1]))) 
     image = image.resize((img_height, img_width))
 
@@ -283,16 +324,10 @@ def update_output(file, file_name):
         str(100*np.max(score)) + " percent confidence")
         
 
-    return [output]
-
-def zipdir(path, ziph):
-    for root, dirs, files in os.walk(path):
-        for file in files:
-            ziph.write(os.path.join(root, file),
-                       os.path.relpath(os.path.join(root, file),
-                                       os.path.join(path, '..')))
+    return [output], image_ret
 
 
+# Download model callback for user to save whatever they ended up using
 @app.callback(
         Output({'type': 'download_model', 'index': MATCH}, 'data'),
         Input({'type': 'download_button', 'index': MATCH}, 'n_clicks'),
@@ -300,13 +335,18 @@ def zipdir(path, ziph):
         prevent_initial_call = True)
 def download_tensor(n_clicks, file_name):
     global tensor
-    print('yo')
     f = os.path.join(tensor[file_name].session_dir, file_name)
+    # Save model on serverside
     tensor[file_name].model.save(f+'/my_model.h5')
 
+    # Send file over to the user 
     ret = dcc.send_file(f+'/my_model.h5')
-    
+   
+    # Remove the file serverside 
     os.remove(f+'/my_model.h5')
+
+    # This could all probably be done in memeory but I couldn't seem to figure
+    # out how to make tensorflow work with me in the regard
 
     return ret
 
