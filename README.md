@@ -10,3 +10,6 @@ When uploaded files, make sure its a zip in this format
   * image files 
  
 etc...
+
+A good testing data set is here, but make sure to convert it to a zip instead:
+https://storage.googleapis.com/download.tensorflow.org/example_images/flower_photos.tgz
