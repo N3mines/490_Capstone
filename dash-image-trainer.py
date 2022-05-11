@@ -16,9 +16,6 @@ from PIL import Image
 from pathlib import Path
 import zipfile
 
-# Code in targeted_callback is credited with github link in file
-from packages.targeted_callbacks import targeted_callback
-
 # CSS Styling for the website
 external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
 
@@ -250,21 +247,18 @@ def update_output(is_completed, file_names, upload_id):
 
     return children
 
-# This defenition is using the targeted_callback method which allows multiple
-# functions to have the same output.  This didn't quite work with lots of
-# testing, but the functionw as never changed back to the main callback layout
 
 # This defenition is just used to start the tensor training and return a
 # message when it's done
-def train_feedback(children):
+@app.callback(
+        Output({'type': 'trained', 'index': MATCH}, 'children'),
+        Input({'type': 'train_model', 'index': MATCH}, 'n_clicks'),
+        State({'type': 'dir_path', 'index': MATCH}, 'children'),
+        State({'type': 'epochs', 'index': MATCH}, 'value'),
+        State({'type': 'randomize', 'index': MATCH}, 'value'),
+        prevent_initial_call=True)
+def train_feedback(n_clicks, file_name, epochs, randomize):
     global tensor
-
-     
-    input_states = dash.callback_context.states
-    state_iter = iter(input_states.values())
-    file_name = next(state_iter)
-    epochs = next(state_iter)
-    randomize = next(state_iter)
 
     f = os.path.join(tensor[file_name].session_dir, file_name)
     tensor[file_name].build_tensor(f, randomize)
@@ -277,27 +271,15 @@ def train_feedback(children):
 
     return children
 
-# Part of the train_feedback callback
-targeted_callback(
-        train_feedback,
-        Input({'type': 'train_model', 'index': MATCH}, 'n_clicks'),
-        Output({'type': 'trained', 'index': MATCH}, 'children'),
-        State({'type': 'dir_path', 'index': MATCH}, 'children'),
-        State({'type': 'epochs', 'index': MATCH}, 'value'),
-        State({'type': 'randomize', 'index': MATCH}, 'value'),
-        app=app)
 
 # Message for when training button is initially clicked so user knows something
 # is happening
+@app.callback(
+        Output({'type': 'training', 'index': MATCH}, 'children'),
+        Input({'type': 'train_model', 'index': MATCH}, 'n_clicks'),
+        prevent_initial_call=True)
 def pretrain_feedback(n_clicks):
     return 'Training! Please wait :)'
-
-# Part of the pretrain_feedback
-targeted_callback(
-        pretrain_feedback,
-        Input({'type': 'train_model', 'index': MATCH}, 'n_clicks'),
-        Output({'type': 'training', 'index': MATCH}, 'children'),
-        app=app)
 
 # Add the prediction results and image it predicted on to the card.
 @app.callback(
